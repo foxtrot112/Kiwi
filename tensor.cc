@@ -38,6 +38,15 @@ tensor1 operator*(const tensor1 &a, const float &b) {
     return out;
 };
 
+tensor1 operator*(const float &b,const tensor1 &a) { 
+    tensor1 out(a.size());
+    
+    for(int i = 0 ; i < a.size() ; ++i) {
+        out[i] = a[i] * b;
+    }
+    return out;
+};
+
 float dot(const tensor1 &a, const tensor1 &b) {
     float scaler_product = 0.0;
 
@@ -92,6 +101,20 @@ tensor2 operator*(const tensor2 &A, const float b) {
             out[i][j] = A[i][j]*b;
         }
     }
+
+    return out;
+}
+
+tensor2 operator*(const float b ,const tensor2 &A) {
+       tensor2 out(A.size(),tensor1(A[0].size()));
+
+    for(int i = 0 ; i < A.size() ; i++) {
+        for(int j = 0 ; j < A[0].size() ; j++) {
+            out[i][j] = A[i][j]*b;
+        }
+    }
+
+    return out;
 }
 
 tensor2 operator*(const tensor2 &A, const tensor2 &B) {
@@ -118,4 +141,14 @@ tensor2 operator*(const tensor3 &AA, const tensor1 &b) {
    return out;
 }
 
-
+tensor2 transpose(const tensor2 &A) {
+    tensor2 out(A[0].size(), tensor1(A.size(),0.0f));
+    
+    for(int i = 0 ; i < A.size() ; i++) {
+        for(int j = 0 ; j < A[0].size() ; j++) {
+            out[j][i] = A[i][j];
+        }
+    }
+    
+    return out;
+}
