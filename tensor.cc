@@ -70,6 +70,8 @@ tensor1 operator*(const tensor2 &A, const tensor1 &b) {
 }
 
 tensor2 operator+(const tensor2 &A, const tensor2 &B) {
+
+    if(A.size() != B.size() || A[0].size() != B[0].size()) throw std::runtime_error("unmated Tensor size");
     tensor2 out(A.size(),tensor1(A[0].size()));
 
     for(int i = 0 ; i < A.size() ; i++) {
@@ -82,6 +84,8 @@ tensor2 operator+(const tensor2 &A, const tensor2 &B) {
 }
 
 tensor2 operator-(const tensor2 &A, const tensor2 &B) {
+    if(A.size() != B.size() || A[0].size() != B[0].size()) throw std::runtime_error("unmated Tensor size");
+
     tensor2 out(A.size(),tensor1(A[0].size()));
 
     for(int i = 0 ; i < A.size() ; i++) {
@@ -118,6 +122,8 @@ tensor2 operator*(const float b ,const tensor2 &A) {
 }
 
 tensor2 operator*(const tensor2 &A, const tensor2 &B) {
+    if(A[0].size() != B.size()) throw std::runtime_error("Unmatch Tensor multiplication size");
+
     tensor2 out(A.size(),tensor1(B[0].size(),0.0f));
     
     for(int i = 0 ; i < A.size() ; i++) {

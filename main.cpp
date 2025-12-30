@@ -1,45 +1,14 @@
 #include <iostream>
 
-#include "Embedding.cc"
-#include "Attention.cc"
-#include "FFN.cc"
-#include "BackPropergation.cc"
+#include "model.cc"
 
-#include "examples.cc"
-
-#include "TunningCache.cc"
 
 #define dModel 512
 #define Heads 8
 #define dKQV (dModel/Heads)
 
 #define MLP_hidden (dModel*4)
-#define Nx 5 //layer number
-///Total tunnable parameter without any normalization or quantization is given by (heads*3 + 1 + 2)*Nx : weights matrices , bais = 3*Nx
-
-#define searchWords 10 
-#define smoothingHot 5
-
-#define epochs 100
-
-struct LayerPeramaters {
-   tensor3 pWQ_heads; //Heads x dModel x dKQV
-   tensor3 pWK_heads; //Heads x dModel x dKQV
-   tensor3 pWV_heads; //Heads x dModel x dKQV
-
-   tensor2 WO ; // dModel x dModel
-   tensor1 bO ; // dModel
-
-   tensor2 W1 ; // dModel x MLP_hidden
-   tensor1 b1 ; // MLP_hidden
-
-   tensor2 W2 ; // MLP_hidden x dModel
-   tensor1 b2 ; // dModel
-};
-
-
-
-
+#define Nx 12
 
 
 int main() {
@@ -69,13 +38,13 @@ int main() {
  
 
    for(int h = 0 ; h < Heads ; h++) {
-     layers_params[layer].pWQ_heads[h] = initRandomTensor2(dModel,dKQV,4745.0f + Heads*h + Nx*layer, -0.1f, 0.1f);
-     layers_params[layer].pWK_heads[h] = initRandomTensor2(dModel,dKQV,8745.0f + Heads*h + Nx*layer, -0.1f, 0.1f);
-     layers_params[layer].pWV_heads[h] = initRandomTensor2(dModel,dKQV,2345.0f + Heads*h + Nx*layer, -0.1f, 0.1f);
+     layers_params[layer].pWQ_heads[h] = initRandomTensor2(dModel,dKQV,4745.0f + Heads*h + Nx*layer, -1.1f, 1.1f);
+     layers_params[layer].pWK_heads[h] = initRandomTensor2(dModel,dKQV,8745.0f + Heads*h + Nx*layer, -1.1f, 1.1f);
+     layers_params[layer].pWV_heads[h] = initRandomTensor2(dModel,dKQV,2345.0f + Heads*h + Nx*layer, -1.1f, 1.1f);
    }
    
-   layers_params[layer].WO = initRandomTensor2(dModel,dModel,9987.0f + Nx*layer, -0.1f, 0.1f);
-   layers_params[layer].bO = initRandomTensor2(1,dModel,7765.0f + Nx*layer, -0.1f, 0.1f)[0];
+   layers_params[layer].WO = initRandomTensor2(dModel,dModel,9987.0f + Nx*layer, -1.1f, 1.1f);
+   layers_params[layer].bO = initRandomTensor2(1,dModel,7765.0f + Nx*layer, -0.1f, 1.1f)[0];
 
    //MLP stuff
 
@@ -88,8 +57,8 @@ int main() {
    
   tensor2 output_projection_weights = initRandomTensor2(dModel, vocab.size(), 202421.0f, -0.1f, 0.1f);
   tensor1 output_projection_bias = initRandomTensor2(1, vocab.size(), 303421.0f, -0.1f, 0.1f)[0];
-  
-  
+
+  /*
   ///Training EXECUTION PHASE
 bool checkfor_Wo = fileExists("tunning_cache/Output_Projection_Weights.bin");
 bool checkfor_bo = fileExists("tunning_cache/Output_Projection_Bias.bin");
@@ -102,7 +71,9 @@ if(checkfor_Wo && checkfor_bo) {
     output_projection_bias = loadTensor1Bin(bo_path);
 } else {
 
-for(int d = 0 ; d < generated_sentences.size() ; d++) {
+ int traing_data_size = generated_sentences.size(); traing_data_size = overide_test;
+
+for(int d = 0 ; d < traing_data_size ; d++) {
 
 for(int e = 0 ; e < epochs ; e++) {
   std::string test_sentence = "this is a sample sentence for testing the transformer";
@@ -141,6 +112,9 @@ for(int i = 0 ; i < searchWords ; i++) {
   }
 std::vector<tensor2> layer_inputs(Nx);
 std::vector<AttentionCache> att_caches(Nx);
+
+std::vector<LayerNormCache> ln_caches(Nx);
+
   for(int n = 0 ; n < Nx ; n++) {
 
     layer_inputs[n] = embedding_input;
@@ -150,7 +124,7 @@ std::vector<AttentionCache> att_caches(Nx);
                                               layers_params[n].pWV_heads,
                                               layers_params[n].WO,
                                               dModel,
-                                              Heads);*/
+                                              Heads);
                
                                               
     att_caches[n] = multiHeadAttentionCache(
@@ -170,7 +144,13 @@ std::vector<AttentionCache> att_caches(Nx);
 
 
       
-      embedding_input = layerNorm(embedding_input + embedding_tilda, 1.0f, 0.0f);
+      LayerNormCache ln_cache;
+      tensor2 ln_out;
+      
+      ln_cache = layerNormForward(embedding_input + embedding_tilda, ln_out);
+      ln_caches[n] = ln_cache;
+
+      embedding_input = ln_out;
 
       //Feed Forward Network
       tensor2 ffn_output = MultiLayerPreceptron(embedding_input,
@@ -246,27 +226,42 @@ std::vector<AttentionCache> att_caches(Nx);
       tensor2 dX = dEmbeddingInput;
 
       for(int n = Nx - 1; n >= 0; n--) {
+        // dX = layerNormBackward(dX, ln_caches[n]);
+
+         tensor2 dX_ln = layerNormBackward(dX, ln_caches[n]);
+
+    // 2) Residual split
+         tensor2 dX_residual = dX_ln;   // goes straight through
+         tensor2 dA          = dX_ln;   // goes into attention
+       
+
+
         tensor2 dX_pre;
          backpropMultiHeadAttention(
            dX,
-           embedding_input,
+           layer_inputs[n],
            att_caches[n],
            layers_params[n].pWQ_heads,
            layers_params[n].pWK_heads,
            layers_params[n].pWV_heads,
            layers_params[n].WO,
             dX_pre,
-             0.01f
+             0.001f
          ) ;
 
-         dX = dX_pre;
+       dX = dX_residual;
+        for(int t = 0; t < dX.size(); t++) {
+         for(int i = 0; i < dX[0].size(); i++) {
+            dX[t][i] += dX_pre[t][i];
+        }
+    }
       }
 
 
 
 
-      propergate_projection_weight(output_projection_weights, targeted_embedding, probabilities, actual_one_hot, 0.01f);
-      propergate_projection_bais(output_projection_bias, probabilities, actual_one_hot, 0.01f);
+      propergate_projection_weight(output_projection_weights, targeted_embedding, probabilities, actual_one_hot, 0.001f);
+      propergate_projection_bais(output_projection_bias, probabilities, actual_one_hot, 0.001f);
 
 
       
@@ -292,7 +287,7 @@ std::vector<AttentionCache> att_caches(Nx);
 }
 
 ///TESTING PHASE
-    std::string test_sentence = "The young";
+    std::string test_sentence = "The sun dipped";
     std::string original_sentence = test_sentence + " " + "model to generate the next words based on the given input";
      auto realtokens = tokenize(original_sentence);
 
@@ -319,7 +314,7 @@ for(int i = 0 ; i < searchWords ; i++) {
                                               layers_params[n].pWV_heads,
                                               layers_params[n].WO,
                                               dModel,
-                                              Heads);*/
+                                              Heads);
 
 
 
@@ -331,7 +326,7 @@ for(int i = 0 ; i < searchWords ; i++) {
     layers_params[n].WO,
     dModel,
     Heads
-);
+       );
 
      tensor2 embedding_tilda = att_cache.O;
 
@@ -408,6 +403,39 @@ for(int i = 0 ; i < searchWords ; i++) {
     
      std::cout << test_sentence << "\n";
 
+*/
+
+  
+   Model fModel;
+   fModel.vocab = vocab;
+   fModel.learningRate = 1e-3;
+
+   fModel._dModel = dModel;
+   fModel._epoch = 100;
+   fModel._HeadN = Heads;
+   fModel._LayerN = Nx;
+
+   fModel.layers_params = layers_params;
+   fModel.output_projection_weights = output_projection_weights;
+   fModel.output_projection_bias = output_projection_bias;
+
+   fModel.training_examples = generated_sentences;
+
+
+   fModel.train(model,10,2);
+
+
+
+   std::string prompt = "Classical Mechanics is the study of";
+
+   fModel.generates(model,prompt,6,prompt);
+
+      
+
+
+
+   std::cout << prompt << "\n";
+ 
 
 
   return 0;

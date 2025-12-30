@@ -2,7 +2,7 @@
 
 #include "tensor.cc"
 #include "Transformer.cc"
-
+#include <iostream>
 #include <algorithm>
 
 #define BCONV 2.0/sqrt(3.141592654)
@@ -24,6 +24,12 @@ float dGeLU(float x) {
    return 0.5f * (1.0f + erf) + 0.5f * x * derf; 
 }
 
+float Relu(float x ) {
+  return (x > 0.0f) ? x : 0.0f;
+}
+
+
+
 tensor2 MultiLayerPreceptron(const tensor2 &embeddings,const tensor2 W1,const tensor1 b1,const tensor2 W2,const tensor1 b2) {
    
    if(W2.size() != W1[0].size()) {
@@ -38,7 +44,7 @@ tensor2 MultiLayerPreceptron(const tensor2 &embeddings,const tensor2 W1,const te
            for(int k = 0 ; k < W1.size() ; k++) {
                hiddenEmbeddings[i][j] += embeddings[i][k] * W1[k][j];
            }
-           hiddenEmbeddings[i][j] = GeLU(hiddenEmbeddings[i][j]);
+           hiddenEmbeddings[i][j] = Relu((hiddenEmbeddings[i][j]));
        }
    }
 

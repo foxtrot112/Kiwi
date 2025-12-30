@@ -78,8 +78,8 @@ class vocabulary {
 
     vocabulary() {
         // Reserve special tokens
-        add_token("<PAD>"); // 0
-        add_token("<UNK>"); // 1
+       // add_token("<PAD>"); // 0
+       // add_token("<UNK>"); // 1
         unk_id = 1;
     }
 
