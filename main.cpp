@@ -404,8 +404,12 @@ for(int i = 0 ; i < searchWords ; i++) {
      std::cout << test_sentence << "\n";
 
 */
-
+   
+   std::string layercache_path = "tunning_cache/Layers";
+   std::string projectioncache_path = "tunning_cache";
   
+   loadCache(layers_params,output_projection_weights,output_projection_bias,Nx,Heads,layercache_path,projectioncache_path);
+   
    Model fModel;
    fModel.vocab = vocab;
    fModel.learningRate = 1e-3;
@@ -418,13 +422,13 @@ for(int i = 0 ; i < searchWords ; i++) {
    fModel.layers_params = layers_params;
    fModel.output_projection_weights = output_projection_weights;
    fModel.output_projection_bias = output_projection_bias;
+   
+   fModel.layerCachePaths = layercache_path;
+   fModel.projectionCachePaths = projectioncache_path;
 
    fModel.training_examples = generated_sentences;
 
-
-   fModel.train(model,10,2);
-
-
+   if(true) fModel.train(model,10,2);
 
    std::string prompt = "Classical Mechanics is the study of";
 

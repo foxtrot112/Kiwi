@@ -34,6 +34,23 @@ struct labels {
     std::string training_label;
 };
 
+struct LayerCacheConfig {
+   std::vector<std::string> WQ_cache_path;
+   std::vector<std::string> WK_cache_path;
+   std::vector<std::string> WV_cache_path;
+   std::string Wo_cache_path;
+
+   std::string W1_cache_path;
+   std::string W2_cache_path;
+   std::string b1_cache_path;
+   std::string b2_cache_path;
+};
+
+struct projectionCacheConfig {
+  std::string Wprojection_cache_path;
+  std::string b_projection_cache_path;
+};
+
 
 class Model {
   public:
@@ -54,7 +71,10 @@ class Model {
     tensor1 output_projection_bias;
 
     std::vector<std::string> training_examples;
-   
+    
+    std::string layerCachePaths;
+    std::string projectionCachePaths;
+
    
    void train(EmbeddingModel &model,size_t overide_example_training,size_t token_intial);
    void generates(EmbeddingModel &model,std::string intial_prompt,size_t number_of_tokens,std::string &output);
@@ -65,7 +85,6 @@ class Model {
      labels getLabels(std::string example,size_t token_intial);  
 
      void saveCache();
-     void loadCache();
 };
 
 
@@ -275,6 +294,8 @@ for(int bn = _LayerN - 1; bn >= 0; --bn) {
        propergate_projection_weight(output_projection_weights, targeted_embedding, probabilities, hot_probabilities, learningRate);
        propergate_projection_bais(output_projection_bias, probabilities, hot_probabilities, learningRate);
          
+       saveCache();
+
        example_labels.training_label += " " + vocab.index_to_token(predicted_index);
        std::cout <<"\r"  <<  " " + vocab.index_to_token(predicted_index) << std::flush;
        
@@ -345,4 +366,147 @@ void Model::generates(EmbeddingModel &model,std::string intial_prompt,size_t num
     
     output = prompt;
       
+}
+
+
+void Model::saveCache() {
+
+  std::string extention = ".bin";
+  ///Layers
+   
+  std::string base_Wq = "cacheWQ_";
+  std::string base_Wk = "cacheWK_";
+  std::string base_Wv = "cacheWV_";
+  std::string base_Wo = "cacheWO_";
+  
+  std::string base_W1 = "cacheW1_";
+  std::string base_W2 = "cacheW2_";
+  std::string base_b1 = "cacheB1_";
+  std::string base_b2 = "cacheB2_";
+
+
+
+
+  for(int n = 0 ; n < _LayerN; n++) {
+    for(int h = 0 ; h < _HeadN ; h++) {
+       std::string filenameWqni = base_Wq + "n" + std::to_string(n) + "h" + std::to_string(h);
+       std::string filenameWkni = base_Wk + "n" + std::to_string(n) + "h" + std::to_string(h);
+       std::string filenameWvni = base_Wv + "n" + std::to_string(n) + "h" + std::to_string(h);
+       
+       saveTensor2Bin(layers_params[n].pWQ_heads[h],layerCachePaths + "/" + filenameWqni + extention);
+       saveTensor2Bin(layers_params[n].pWK_heads[h],layerCachePaths + "/" + filenameWkni + extention);
+       saveTensor2Bin(layers_params[n].pWV_heads[h],layerCachePaths + "/" + filenameWvni + extention);
+    } 
+     
+       std::string filenameWon = base_Wo + "n" + std::to_string(n);
+       std::string filenameW1n = base_W1 + "n" + std::to_string(n);
+       std::string filenameW2n = base_W2 + "n" + std::to_string(n);
+
+       std::string filenameB1n = base_b1 + "n" + std::to_string(n);
+       std::string filenameB2n = base_b2 + "n" + std::to_string(n);
+
+       saveTensor2Bin(layers_params[n].WO,layerCachePaths + "/" + filenameWon + extention);
+       saveTensor2Bin(layers_params[n].W1,layerCachePaths + "/" + filenameW1n + extention); 
+       saveTensor2Bin(layers_params[n].W2,layerCachePaths + "/" + filenameW2n + extention);       
+       
+       saveTensor1Bin(layers_params[n].b1,layerCachePaths + "/" + filenameB1n + extention);
+       saveTensor1Bin(layers_params[n].b2,layerCachePaths + "/" + filenameB2n + extention);
+
+  }
+
+  std::string base_Wp = "cacheWP_";
+  std::string base_bp = "cacheBP_";
+  
+  std::string filenameWp = base_Wp + "0";
+  std::string filenameBp = base_bp + "0";
+
+  saveTensor2Bin(output_projection_weights,projectionCachePaths + "/" + filenameWp + extention);
+  saveTensor1Bin(output_projection_bias,projectionCachePaths + "/" + filenameBp + extention);
+ 
+}
+
+
+void loadCache(std::vector<LayerPeramaters> &LayerPerams,tensor2 &WeightProjection,tensor1 &biasProjection,size_t _LayerN, size_t _HeadN, std::string layerCachePaths, std::string projectionCachePaths) {
+   // std::vector<LayerPeramaters> LayerPeramsOut(_LayerN);
+    
+      std::string extention = ".bin";
+  ///Layers
+   
+  std::string base_Wq = "cacheWQ_";
+  std::string base_Wk = "cacheWK_";
+  std::string base_Wv = "cacheWV_";
+  std::string base_Wo = "cacheWO_";
+  
+  std::string base_W1 = "cacheW1_";
+  std::string base_W2 = "cacheW2_";
+  std::string base_b1 = "cacheB1_";
+  std::string base_b2 = "cacheB2_";
+
+
+
+
+  for(int n = 0 ; n < _LayerN; n++) {
+    for(int h = 0 ; h < _HeadN ; h++) {
+       std::string filenameWqni = base_Wq + "n" + std::to_string(n) + "h" + std::to_string(h);
+       std::string filenameWkni = base_Wk + "n" + std::to_string(n) + "h" + std::to_string(h);
+       std::string filenameWvni = base_Wv + "n" + std::to_string(n) + "h" + std::to_string(h);
+       
+
+       if(!fileExists(layerCachePaths + "/" + filenameWqni + extention) ||
+        !fileExists(layerCachePaths + "/" + filenameWkni + extention) || 
+        !fileExists(layerCachePaths + "/" + filenameWvni + extention)) {
+          return;
+        }
+
+
+
+
+       LayerPerams[n].pWQ_heads[h] = loadTensor2Bin(layerCachePaths + "/" + filenameWqni + extention);
+       LayerPerams[n].pWK_heads[h] = loadTensor2Bin(layerCachePaths + "/" + filenameWkni + extention);
+       LayerPerams[n].pWV_heads[h] = loadTensor2Bin(layerCachePaths + "/" + filenameWvni + extention);
+    } 
+     
+       std::string filenameWon = base_Wo + "n" + std::to_string(n);
+       std::string filenameW1n = base_W1 + "n" + std::to_string(n);
+       std::string filenameW2n = base_W2 + "n" + std::to_string(n);
+
+       std::string filenameB1n = base_b1 + "n" + std::to_string(n);
+       std::string filenameB2n = base_b2 + "n" + std::to_string(n);
+
+        if(!fileExists(layerCachePaths + "/" + filenameWon + extention) ||
+        !fileExists(layerCachePaths + "/" + filenameW1n + extention) || 
+        !fileExists(layerCachePaths + "/" + filenameW2n + extention) || 
+        !fileExists(layerCachePaths + "/" + filenameB1n + extention) ||
+        !fileExists(layerCachePaths + "/" + filenameB2n + extention)) {
+          return;
+        }
+
+ 
+
+       LayerPerams[n].WO = loadTensor2Bin(layerCachePaths + "/" + filenameWon + extention);
+       LayerPerams[n].W1 = loadTensor2Bin(layerCachePaths + "/" + filenameW1n + extention); 
+       LayerPerams[n].W2 = loadTensor2Bin(layerCachePaths + "/" + filenameW2n + extention);       
+       
+       LayerPerams[n].b1 = loadTensor1Bin(layerCachePaths + "/" + filenameB1n + extention);
+       LayerPerams[n].b2 = loadTensor1Bin(layerCachePaths + "/" + filenameB2n + extention);
+
+  }
+
+  std::string base_Wp = "cacheWP_";
+  std::string base_bp = "cacheBP_";
+  
+  std::string filenameWp = base_Wp + "0";
+  std::string filenameBp = base_bp + "0";
+
+        if(!fileExists(projectionCachePaths + "/" + filenameWp + extention) ||
+        !fileExists(projectionCachePaths + "/" + filenameBp + extention)) {
+          return;
+        }
+
+  WeightProjection = loadTensor2Bin(projectionCachePaths + "/" + filenameWp + extention);
+  biasProjection = loadTensor1Bin(projectionCachePaths + "/" + filenameBp + extention);
+
+
+
+
 }
