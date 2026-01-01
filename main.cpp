@@ -11,6 +11,9 @@
 #define Nx 12
 
 
+#define exampleBatch 10
+
+
 int main() {
 
  //inital 01 step;   
@@ -38,9 +41,9 @@ int main() {
  
 
    for(int h = 0 ; h < Heads ; h++) {
-     layers_params[layer].pWQ_heads[h] = initRandomTensor2(dModel,dKQV,4745.0f + Heads*h + Nx*layer, -1.1f, 1.1f);
-     layers_params[layer].pWK_heads[h] = initRandomTensor2(dModel,dKQV,8745.0f + Heads*h + Nx*layer, -1.1f, 1.1f);
-     layers_params[layer].pWV_heads[h] = initRandomTensor2(dModel,dKQV,2345.0f + Heads*h + Nx*layer, -1.1f, 1.1f);
+     layers_params[layer].pWQ_heads[h] = initRandomTensor2(dModel,dKQV,4745.0f + Heads*h + Nx*layer, -0.1f, 0.1f);
+     layers_params[layer].pWK_heads[h] = initRandomTensor2(dModel,dKQV,8745.0f + Heads*h + Nx*layer, -0.1f, 0.1f);
+     layers_params[layer].pWV_heads[h] = initRandomTensor2(dModel,dKQV,2345.0f + Heads*h + Nx*layer, -0.1f, 0.1f);
    }
    
    layers_params[layer].WO = initRandomTensor2(dModel,dModel,9987.0f + Nx*layer, -1.1f, 1.1f);
@@ -65,33 +68,34 @@ int main() {
    
    Model fModel;
    fModel.vocab = vocab;
-   fModel.learningRate = 1e-3;
+   
 
    fModel._dModel = dModel;
-   fModel._epoch = 100;
+   fModel._epoch = 15;
    fModel._HeadN = Heads;
    fModel._LayerN = Nx;
-
+   
+   //fModel.learningRate = (1.0/sqrt(dModel)) * std::min((1.0/sqrt(fModel._epoch)),(1.0/sqrt(4000.0*4000.0*4000.0)));
+   fModel.learningRate = 1e-4; 
    fModel.layers_params = layers_params;
    fModel.output_projection_weights = output_projection_weights;
    fModel.output_projection_bias = output_projection_bias;
-   
    fModel.layerCachePaths = layercache_path;
    fModel.projectionCachePaths = projectioncache_path;
 
    fModel.training_examples = generated_sentences;
 
-   if(true) fModel.train(model,10,2);
+   if(true) fModel.train(model,exampleBatch,2);
 
-   std::string prompt = "Classical Mechanics is the study of";
-
-   fModel.generates(model,prompt,6,prompt);
+   std::string prompt = "The sun";
+   std::string output; 
+   fModel.generates(model,prompt,6,output);
 
       
 
 
 
-   std::cout << prompt << "\n";
+   std::cout << output << "\n";
  
 
 

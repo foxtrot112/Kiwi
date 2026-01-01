@@ -167,6 +167,23 @@ struct EmbeddingModel {
 };
 
 
+tensor2 create_position_encoding(int seq_len, int d_model) {
+    tensor2 PE(seq_len, tensor1(d_model, 0.0f));
+
+    for (int pos = 0; pos < seq_len; ++pos) {
+        for (int i = 0; i < d_model; ++i) {
+            float angle = pos / pow(10000.0f, 2.0f * (i / (float)d_model));
+            if (i % 2 == 0) {
+                PE[pos][i] = sin(angle);
+            } else {
+                PE[pos][i] = cos(angle);
+            }
+        }
+    }
+    return PE;
+}
+
+
 tensor2 initRandomTensor2(size_t rows, size_t cols,float seed, float lower=-0.1f, float upper=0.1f) {
     tensor2 tensor(rows, tensor1(cols));
 

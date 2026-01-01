@@ -127,24 +127,25 @@ void Model::train(EmbeddingModel& model,size_t overide_example_training,size_t t
      for(int d = 0; d < overide_example_training ; d++) {
        labels example_labels = getLabels(training_examples[d],token_intial);
        
-       std::vector<std::string> tokens = tokenize(example_labels.training_label);
+       
        std::vector<std::string> hot_tokens = tokenize(example_labels.hot_label);
        
        
        std::cout << "\r" << example_labels.training_label << std::flush;
+       std::vector<float> token_losses;
        for(int t = 0 ; t < hot_tokens.size() ; t++) {
 
+       std::vector<std::string> tokens = tokenize(example_labels.training_label);
+         
         
-        
-
-
-
          tensor2 embedding_input;
 
           for(auto w:tokens) {
             size_t token_id = vocab.token_to_index(w);
             embedding_input.push_back(model.get_embedding(token_id));
           }
+
+         embedding_input = embedding_input + create_position_encoding(tokens.size(),_dModel);  
         
          std::vector<tensor2> layer_inputs(_LayerN);
          std::vector<AttentionCache> Attention_caches(_LayerN);
@@ -200,24 +201,24 @@ void Model::train(EmbeddingModel& model,size_t overide_example_training,size_t t
         // std::cout << logits[testing_nan] << "\n";
 
          tensor1 probabilities = softMax({logits})[0];
-         probabilities[vocab.token_to_index("<PAD>")] = 0.0f;
+        // probabilities[vocab.token_to_index("<PAD>")] = 0.0f;
          
          
 
 
-       //  size_t predicted_index = std::distance(probabilities.begin(), std::max_element(probabilities.begin(),probabilities.end()));
+        size_t predicted_index = std::distance(probabilities.begin(), std::max_element(probabilities.begin(),probabilities.end()));
          
        float temperature = 0.8f;
 
-    for (float &p : probabilities)
-    p = std::pow(p, 1.0f / temperature);
+    //for (float &p : probabilities)
+   // p = std::pow(p, 1.0f / temperature);
 
 // renormalize
-       float sum = std::accumulate(probabilities.begin(), probabilities.end(), 0.0f);
-       for (float &p : probabilities)
-         p /= sum;
+       //float sum = std::accumulate(probabilities.begin(), probabilities.end(), 0.0f);
+         //for (float &p : probabilities)
+         //p /= sum;
 
-     size_t predicted_index = sample_from_distribution(probabilities);
+        // size_t predicted_index = sample_from_distribution(probabilities);
         // std::cout << probabilities[predicted_index] << "\n";
 
 
@@ -228,12 +229,28 @@ void Model::train(EmbeddingModel& model,size_t overide_example_training,size_t t
          
          hot_probabilities[actual_index] = 1.0;
 
-   
-         
+         float eps_label_symbol = 0.1;
+
+         for(auto &y:hot_probabilities)
+           y = (1.0 - eps_label_symbol)*y + eps_label_symbol/vocab.size();
+          
+          float cross_entropy_loss = 0.0f;
+
+          for(int i = 0 ; i < hot_probabilities.size() ; i++) {
+            cross_entropy_loss += hot_probabilities[i] * std::log(probabilities[i] + 1e-5);
+          }
+
+          cross_entropy_loss *= -1.0f;
+          token_losses.push_back(cross_entropy_loss);
+  
+        example_labels.training_label += " " + vocab.index_to_token(predicted_index);
+       std::cout <<"\r"  <<  " " + vocab.index_to_token(predicted_index) << std::flush ; 
+
+
         // if (the_actual_word == "<PAD>") continue;
 
          /// Backpropergation :
-      tensor1 dTargetedEmbedding(_dModel, 0.0f);
+        tensor1 dTargetedEmbedding(_dModel, 0.0f);
 
         for(int k = 0; k < _dModel; k++) {
           for(int j = 0; j < vocab.size(); j++) {
@@ -296,11 +313,20 @@ for(int bn = _LayerN - 1; bn >= 0; --bn) {
          
        saveCache();
 
-       example_labels.training_label += " " + vocab.index_to_token(predicted_index);
-       std::cout <<"\r"  <<  " " + vocab.index_to_token(predicted_index) << std::flush;
+
        
        }
+       
+       float average = 0.0;
+         for(auto loss:token_losses) 
+           average += loss;
+       
+       std::cout << "\n";
+       std::cout << average / token_losses.size() << "\n";
+       
      }
+
+     std::cout << "\n";
    }  
  }
 
@@ -309,9 +335,11 @@ for(int bn = _LayerN - 1; bn >= 0; --bn) {
 void Model::generates(EmbeddingModel &model,std::string intial_prompt,size_t number_of_tokens,std::string &output) {
      
     std::string prompt = intial_prompt;
-    std::vector<std::string> tokens = tokenize(prompt);
+    
 
     for(int t = 0 ; t < number_of_tokens ; t++) {
+        std::vector<std::string> tokens = tokenize(prompt);
+
          tensor2 embedding_input;
 
           for(auto w:tokens) {
@@ -319,29 +347,45 @@ void Model::generates(EmbeddingModel &model,std::string intial_prompt,size_t num
             embedding_input.push_back(model.get_embedding(token_id));
           }
         
+               
          std::vector<tensor2> layer_inputs(_LayerN);
          std::vector<AttentionCache> Attention_caches(_LayerN);
-         std::vector<LayerNormCache> LayerNorm_caches(_LayerN);
-
+         std::vector<LayerNormCache> LayerNorm1_caches(_LayerN); // LayerNorm after attention
+         std::vector<MLPCache> MLP_caches(_LayerN);            // you need to define this struct
+         std::vector<LayerNormCache> LayerNorm2_caches(_LayerN); // LayerNorm after MLP
          
-         for(int n = 0 ; n < _LayerN ; n++) {
-            layer_inputs[n] = embedding_input;
-            
-            Attention_caches[n] = multiHeadAttentionCache(embedding_input,layers_params[n].pWQ_heads,layers_params[n].pWK_heads,layers_params[n].pWV_heads,
-                                                    layers_params[n].WO,_dModel,_HeadN);
+         
+           for(int n = 0 ; n < _LayerN ; n++) {
+             layer_inputs[n] = embedding_input; // input to attention + residual
 
-            tensor2 embedding_tilda = Attention_caches[n].O;  
-            
-            tensor2 Temp_LayerNorm_output;
+             // --- Multi-Head Attention ---
+             Attention_caches[n] = multiHeadAttentionCache(
+                 embedding_input,
+                 layers_params[n].pWQ_heads,
+                 layers_params[n].pWK_heads,
+                 layers_params[n].pWV_heads,
+                 layers_params[n].WO,
+                 _dModel,
+                 _HeadN
+             );
 
-            LayerNorm_caches[n] = layerNormForward(embedding_tilda + embedding_input,Temp_LayerNorm_output);
-            embedding_input = Temp_LayerNorm_output;
+             tensor2 attention_output = Attention_caches[n].O;
 
-             embedding_tilda = MultiLayerPreceptron(embedding_input,layers_params[n].W1,layers_params[n].b1,layers_params[n].W2,layers_params[n].b2);
+             // --- LayerNorm after Attention (first LN) ---
+             tensor2 ln1_output;
+             LayerNorm1_caches[n] = layerNormForward(attention_output + embedding_input, ln1_output);
+             embedding_input = ln1_output;
 
-            auto null_LayerNormCatch = layerNormForward(embedding_tilda + embedding_input,embedding_input);
+             // --- MLP ---
+             MLP_caches[n] = multiLayerPreceptronCache(embedding_input, layers_params[n].W1, layers_params[n].b1,
+                                                        layers_params[n].W2, layers_params[n].b2); // store input + pre-activations
+             tensor2 mlp_output = MLP_caches[n].output;
 
-         }
+             // --- LayerNorm after MLP (second LN) ---
+             tensor2 ln2_output;
+             LayerNorm2_caches[n] = layerNormForward(mlp_output + embedding_input, ln2_output);
+             embedding_input = ln2_output; // this is the new input to the next layer
+        }
 
          tensor1 targeted_embedding = embedding_input[tokens.size() - 1];
 
@@ -354,8 +398,21 @@ void Model::generates(EmbeddingModel &model,std::string intial_prompt,size_t num
          }
 
          tensor1 probabilities = softMax({logits})[0];
+
+    float temperature = 0.7f;
+
+    for (float &p : probabilities)
+    p = std::pow(p, 1.0f / temperature);
+
+// renormalize
+       float sum = std::accumulate(probabilities.begin(), probabilities.end(), 0.0f);
+       for (float &p : probabilities)
+         p /= sum;
          
-         size_t predicted_index = std::distance(probabilities.begin(), std::max_element(probabilities.begin(),probabilities.end()));
+         size_t predicted_index = sample_from_distribution(probabilities);
+        // size_t predicted_index = std::distance(probabilities.begin(), std::max_element(probabilities.begin(),probabilities.end()));
+         
+         std::cout << probabilities[predicted_index] <<"\n";
 
          std::string predicted_next_token = vocab.index_to_token(predicted_index);
          
